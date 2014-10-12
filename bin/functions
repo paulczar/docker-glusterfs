@@ -1,0 +1,50 @@
+#!/bin/bash
+
+function etcd_set_default {
+  etcdctl --no-sync -C $ETCD mk $ETCD_PATH/$1 $2 >/dev/null 2>&1 || true
+}
+
+function etcd_make_directory {
+  etcdctl --no-sync -C $ETCD setdir $ETCD_PATH/$1 >/dev/null 2>&1 || true
+}
+
+function on_exit() {
+    kill -TERM $SERVICE_PID
+    wait $SERVICE_PID 2>/dev/null
+    exit 0
+}
+
+function cluster_members() {
+  CLUSTER_MEMBERS=
+  for key in $(etcdctl --no-sync -C $ETCD ls $ETCD_PATH/volumes/$VOLUME/hosts); do
+    value=$(etcdctl --no-sync -C $ETCD get $key)
+    CLUSTER_MEMBERS+="$(basename $value):/export/$VOLUME "
+  done
+}
+
+function count_cluster_members() {
+  COUNT_CLUSTER_MEMBERS=$(etcdctl --no-sync -C $ETCD ls $ETCD_PATH/volumes/$VOLUME/hosts)
+}
+
+function publish_to_etcd() {
+    etcdctl $ETCD_OPTIONS set $ETCD_PATH/volumes/$VOLUME/hosts/$HOSTNAME $HOST:/export/$VOLUME --ttl $ETCD_TTL >/dev/null
+}
+
+function configure_etcd() {
+  export ETCD_PORT=${ETCD_PORT:-4001}
+  export ETCD="$ETCD_HOST:$ETCD_PORT"
+  export ETCD_PATH=${ETCD_PATH:-/glusterfs}
+  export ETCD_TTL=${ETCD_TTL:-10}
+  export ETCD_OPTIONS="--no-sync -C $ETCD"
+  # wait for etcd to be available
+  until etcdctl --no-sync -C $ETCD ls >/dev/null 2>&1; do
+    echo "echo ==> waiting for etcd at $ETCD..."
+    sleep $(($ETCD_TTL/2))  # sleep for half the TTL
+  done
+  # wait until etcd has discarded potentially stale values
+  sleep $(($ETCD_TTL+1))
+}
+
+function my_ip() {
+  MY_IP=`ip addr show dev eth0 | grep inet | grep eth0 | awk '{print $2}' | awk -F/ '{print $1}'`
+}

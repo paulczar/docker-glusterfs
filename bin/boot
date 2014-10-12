@@ -1,26 +1,119 @@
- Make sure rpcbind is started - GlusterNFS would complain
-## RPC bind service will complain about Locale files but ignore
+#!/bin/bash
+#
+# This script is designed to be run inside the container
+#
+
+# fail hard and fast even on pipelines
+set -meo pipefail
+
+# set debug based on envvar
+[[ $DEBUG ]] && set -x
+
+DIR=$(dirname $0)
+
+# functions
+. $DIR/functions
+
+PORT=${PUBLISH:-24007}
+PROTO=${PROTO:-tcp}
+ETCD_HOST=${ETCD_HOST:-$HOST}
+VOLUME=${VOLUME:-vol1}
+MODE=${MODE:-replica}
+EXPECTED_MEMBERS=${EXPECTED_MEMBERS:-2}
+
+# rpcbind is useful
 service rpcbind start
-## On docker surprisingly hostnames are mapped to IP's :-)
-IPADDR=$(hostname -i)
-## Change this to your name if necessary
-VOLUME=myvolume
-## Start Gluster Management Daemon
-service glusterfs-server start
-if [ -z $VOLUME ]; then
-## Check if volume is null
-service glusterfs-server stop
-exit 255
+
+# volumes will live in /export
+mkdir -p /export
+
+if [[ -z $HOST ]]; then
+  echo '==> $HOST not set.  booting glusterfs without clustering.'
+  glusterd --pid-file=/app/gluster.pid --log-file=- --no-daemon &
+  gluster volume create $VOLUME $(hostname -s):/export/$VOLUME
+  gluster volume start $VOLUME
+  gluster volume info
+  fg
+  echo "==> glusterfs running..."
+
+  exit $?
 fi
-if [ ! -d "/var/lib/glusterfs-server/vols/$VOLUME" ]; then
-## Always create a sub-directory inside a mount-point
-gluster --mode=script --wignore volume create $VOLUME $IPADDR:/mnt/vault/$VOLUME
+
+configure_etcd
+
+etcd_make_directory volumes/$VOLUME/hosts
+etcd_set_default volumes/$VOLUME/host $HOST
+etcd_set_default volumes/$VOLUME/mode $MODE
+etcd_set_default volumes/$VOLUME/expected_members $EXPECTED_MEMBERS
+
+
+# wait for confd to run once and install initial templates
+until confd -onetime -node $ETCD -config-file /app/confd.toml; do
+  echo "echo ==> glusterfs: waiting for confd to write initial templates..."
+  sleep $(($ETCD_TTL/2))  # sleep for half the TTL
+done
+
+count_cluster_members
+cluster_members
+
+echo Starting GlusterFS
+glusterd --pid-file=/app/gluster.pid --log-file=- --no-daemon &
+
+while [[ -z $(netstat -lnt | awk "\$6 == \"LISTEN\" && \$4 ~ \".$PORT\" && \$1 ~ \"$PROTO.?\"") ]] ; do sleep 1; done
+
+echo "==> glusterfs running..."
+
+if [[ $EXPECTED_MEMBERS -eq 1 ]]; then
+    my_ip
+    gluster volume create $VOLUME $MY_IP:/$VOLUME
+    gluster volume start $VOLUME
+    gluster volume info
+elif [[ $COUNT_CLUSTER_MEMBERS -lt $EXPECTED_MEMBERS ]]; then
+  # Perform Election
+  echo "==> Performing Election..."
+  etcdctl $ETCD_OPTIONS ls $ETCD_PATH/election >/dev/null 2>&1 || etcdctl $ETCD_OPTIONS mkdir $ETCD_PATH/election >/dev/null 2>&1
+  if etcdctl $ETCD_OPTIONS mk $ETCD_PATH/election/bootstrap $HOSTNAME >/dev/null 2>&1; then
+    echo "-----> Hurruh I win!"
+    BOOTSTRAP=1
+    etcdctl $ETCD_OPTIONS set $ETCD_PATH/election/bootstrap $HOSTNAME --ttl 300 >/dev/null 2>&1
+    until [[ $COUNT_CLUSTER_MEMBERS -eq $EXPECTED_MEMBERS ]]; do
+      count_cluster_members
+      echo "Expected $EXPECTED_MEMBERS, Have $COUNT_CLUSTER_MEMBERS."
+      echo -n "."
+      sleep 10
+    done
+    cluster_members
+    my_ip
+    gluster volume create $VOLUME $MODE $EXPECTED_MEMBERS $MY_IP:/$VOLUME $CLUSTER_MEMBERS
+    gluster volume start $VOLUME
+    gluster volume info
+  fi
+else
+  echo 'already enough cluster members'
+  exit 1
 fi
-gluster --mode=script --wignore volume start $VOLUME force
-shutdown_gluster()
-{
-service glusterfs-server stop
-exit $?
-}
-trap shutdown_gluster SIGINT
-while true; do sleep 1; done
+
+# smart shutdown on SIGINT and SIGTERM
+trap on_exit INT TERM
+
+# spawn confd in the background to update services based on etcd changes
+confd -node $ETCD -config-file /app/confd.toml &
+CONFD_PID=$!
+
+# publish the service to etcd using the injected HOST and PORT
+if [[ ! -z $PUBLISH ]]; then
+
+  set +e
+
+  # while the port is listening, publish to etcd
+  while [[ ! -z $(netstat -lnt | awk "\$6 == \"LISTEN\" && \$4 ~ \".$PUBLISH\" && \$1 ~ \"$PROTO.?\"") ]] ; do
+    publish_to_etcd
+    sleep $(($ETCD_TTL/2)) # sleep for half the TTL
+  done
+
+  # if the loop quits, something went wrong
+  exit 1
+
+fi
+
+wait

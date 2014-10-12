@@ -41,7 +41,7 @@ ADD https://s3-us-west-2.amazonaws.com/opdemand/confd-v0.5.0-json /usr/local/bin
 RUN chmod +x /usr/local/bin/confd
 
 # Define mountable directories.
-VOLUME ["/var/lib/glusterd/vols"]
+VOLUME ["/export"]
 
 ADD . /app
 
@@ -54,4 +54,4 @@ RUN chmod +x /app/bin/*
 CMD ["/app/bin/boot"]
 
 # Expose ports.
-EXPOSE 111 245 443 24007 2049 8080 6010 6011 6012 38465 38466 38468 38469 49152 49153 49154 49156 49157 49158 49159 49160 49161 49162
+EXPOSE 111 24007 2049 38465 38466 38467 1110 4045
