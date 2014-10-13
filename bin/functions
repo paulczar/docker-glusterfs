@@ -18,16 +18,32 @@ function cluster_members() {
   CLUSTER_MEMBERS=
   for key in $(etcdctl --no-sync -C $ETCD ls $ETCD_PATH/volumes/$VOLUME/hosts); do
     value=$(etcdctl --no-sync -C $ETCD get $key)
-    CLUSTER_MEMBERS+="$(basename $value):/export/$VOLUME "
+    CLUSTER_MEMBERS+="$(basename $key):/export/$VOLUME "
   done
 }
 
+function probe_peers() {
+  for key in $(etcdctl --no-sync -C $ETCD ls $ETCD_PATH/volumes/$VOLUME/hosts); do
+    value=$(etcdctl --no-sync -C $ETCD get $key)
+    if [[ $value == $HOST ]]; then
+      echo .
+    else
+      gluster peer probe $value
+    fi
+  done
+}
+
+function number_peers() {
+  NUMBER_PEERS=$(gluster peer status | head -1 | awk -F': ' '{print $2}')
+}
+
 function count_cluster_members() {
-  COUNT_CLUSTER_MEMBERS=$(etcdctl --no-sync -C $ETCD ls $ETCD_PATH/volumes/$VOLUME/hosts)
+  COUNT_CLUSTER_MEMBERS=$(etcdctl --no-sync -C $ETCD ls $ETCD_PATH/volumes/$VOLUME/hosts | wc -l)
 }
 
 function publish_to_etcd() {
-    etcdctl $ETCD_OPTIONS set $ETCD_PATH/volumes/$VOLUME/hosts/$HOSTNAME $HOST:/export/$VOLUME --ttl $ETCD_TTL >/dev/null
+    etcdctl $ETCD_OPTIONS set $ETCD_PATH/volumes/$VOLUME/hosts/$HOSTNAME $HOST --ttl $ETCD_TTL >/dev/null
+    etcdctl $ETCD_OPTIONS set /hosts/$HOSTNAME $HOST --ttl $ETCD_TTL >/dev/null
 }
 
 function configure_etcd() {

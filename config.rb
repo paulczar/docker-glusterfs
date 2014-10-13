@@ -5,7 +5,7 @@
 # after the equals sign..
 
 # Size of the CoreOS cluster created by Vagrant
-$num_instances=1
+$num_instances=2
 
 # Developer mode?
 

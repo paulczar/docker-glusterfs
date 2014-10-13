@@ -1,0 +1,4 @@
+#!/bin/bash
+# gracefully reload glusterd
+kill -HUP $(cat /app/glusterd.pid)
+exit 0

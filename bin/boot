@@ -14,12 +14,12 @@ DIR=$(dirname $0)
 # functions
 . $DIR/functions
 
-PORT=${PUBLISH:-24007}
-PROTO=${PROTO:-tcp}
-ETCD_HOST=${ETCD_HOST:-$HOST}
-VOLUME=${VOLUME:-vol1}
-MODE=${MODE:-replica}
-EXPECTED_MEMBERS=${EXPECTED_MEMBERS:-2}
+export PORT=${PUBLISH:-24007}
+export PROTO=${PROTO:-tcp}
+export ETCD_HOST=${ETCD_HOST:-$HOST}
+export VOLUME=${VOLUME:-vol1}
+export MODE=${MODE:-replica}
+export EXPECTED_MEMBERS=${EXPECTED_MEMBERS:-2}
 
 # rpcbind is useful
 service rpcbind start
@@ -45,6 +45,7 @@ etcd_make_directory volumes/$VOLUME/hosts
 etcd_set_default volumes/$VOLUME/host $HOST
 etcd_set_default volumes/$VOLUME/mode $MODE
 etcd_set_default volumes/$VOLUME/expected_members $EXPECTED_MEMBERS
+etcdctl --no-sync -C $ETCD /hosts/$HOSTNAME $HOST >/dev/null 2>&1 || true
 
 
 # wait for confd to run once and install initial templates
@@ -68,7 +69,7 @@ if [[ $EXPECTED_MEMBERS -eq 1 ]]; then
     gluster volume create $VOLUME $MY_IP:/$VOLUME
     gluster volume start $VOLUME
     gluster volume info
-elif [[ $COUNT_CLUSTER_MEMBERS -lt $EXPECTED_MEMBERS ]]; then
+else
   # Perform Election
   echo "==> Performing Election..."
   etcdctl $ETCD_OPTIONS ls $ETCD_PATH/election >/dev/null 2>&1 || etcdctl $ETCD_OPTIONS mkdir $ETCD_PATH/election >/dev/null 2>&1
@@ -76,21 +77,21 @@ elif [[ $COUNT_CLUSTER_MEMBERS -lt $EXPECTED_MEMBERS ]]; then
     echo "-----> Hurruh I win!"
     BOOTSTRAP=1
     etcdctl $ETCD_OPTIONS set $ETCD_PATH/election/bootstrap $HOSTNAME --ttl 300 >/dev/null 2>&1
-    until [[ $COUNT_CLUSTER_MEMBERS -eq $EXPECTED_MEMBERS ]]; do
-      count_cluster_members
-      echo "Expected $EXPECTED_MEMBERS, Have $COUNT_CLUSTER_MEMBERS."
-      echo -n "."
+    NEED_MORE=$(expr $EXPECTED_MEMBERS - 1)
+    count_cluster_members
+    until [[ $COUNT_CLUSTER_MEMBERS -eq $NEED_MORE ]]; do
       sleep 10
+      count_cluster_members
+      NEED_MORE=$(expr $EXPECTED_MEMBERS - 1)
+      echo "Expected $NEED_MORE other members, Have $COUNT_CLUSTER_MEMBERS."
+      echo -n "."
     done
     cluster_members
     my_ip
-    gluster volume create $VOLUME $MODE $EXPECTED_MEMBERS $MY_IP:/$VOLUME $CLUSTER_MEMBERS
+    gluster volume create $VOLUME $MODE $EXPECTED_MEMBERS $HOST:/export/$VOLUME $CLUSTER_MEMBERS
     gluster volume start $VOLUME
     gluster volume info
   fi
-else
-  echo 'already enough cluster members'
-  exit 1
 fi
 
 # smart shutdown on SIGINT and SIGTERM

@@ -23,51 +23,53 @@ coreos:
         BindIPv6Only=both
         [Install]
         WantedBy=sockets.target
-#    - name: database-data.service
-#      command: start
-#      enable: true
-#      content: |
-#        [Unit]
-#        Description=database data
-#        After=docker.service
-#        [Service]
-#        Type=oneshot
-#        RemainAfterExit=yes
-#        ExecStartPre=/usr/bin/docker pull paulczar/percona-galera:latest
-#        ExecStart=/bin/sh -c "/usr/bin/docker inspect database-data >/dev/null 2>&1 || docker run --name database-data -v /var/lib/mysql paulczar/percona-galera:latest true"
-#    - name: database.service
-#      command: <%= @command %>
-#      enable: true
-#      content: |
-#        [Unit]
-#        Description=database
-#        After=database-data.service
-#        [Service]
-#        Restart=always
-#        EnvironmentFile=/etc/environment
-#        TimeoutStartSec=20m
-#        ExecStartPre=/usr/bin/docker pull paulczar/percona-galera:latest
-#        ExecStart=/bin/sh -c "/usr/bin/docker run --name database --rm -p 3306:3306 -p 4444:4444 -p 4567:4567 -p 4568:4568 -e PUBLISH=3306 -e HOST=$COREOS_PRIVATE_IPV4 -e CLUSTER=galera --volumes-from database-data paulczar/percona-galera:latest"
-#        ExecStop=/usr/bin/docker stop database
+    - name: glusterfs-data.service
+      command: start
+      enable: true
+      content: |
+        [Unit]
+        Description=glusterfs data
+        After=docker.service
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStartPre=/usr/bin/docker pull paulczar/glusterfs:latest
+        ExecStart=/bin/sh -c "/usr/bin/docker inspect glusterfs-data >/dev/null 2>&1 || \
+          docker run --name glusterfs -v /export paulczar/glusterfs:latest true"
+    - name: glusterfs.service
+      command: <%= @command %>
+      enable: true
+      content: |
+        [Unit]
+        Description=glusterfs
+        After=glusterfs-data.service
+        [Service]
+        Restart=always
+        EnvironmentFile=/etc/environment
+        TimeoutStartSec=20m
+        ExecStartPre=/usr/bin/docker pull paulczar/glusterfs:latest
+        ExecStart=/bin/sh -c "/usr/bin/docker run --rm --cap-add=SYS_ADMIN \
+          -p 111:111 -p 24007:24007 -p 2049:2049 \
+          -p 38465:38465 -p 38466:38466 -p 38467:38467 \
+          -p 1110:1110 -p 4045:4045 -e PUBLISH=24007 \
+          -e EXPECTED_MEMBERS=2 -e DEBUG=1 \
+          -e HOST=$COREOS_PRIVATE_IPV4 paulczar/glusterfs:latest bin/boot"
+        ExecStop=/usr/bin/docker stop database
 write_files:
   - path: /etc/motd
-    content: "Database Cluster Demo\n"
+    content: "Gluster Cluster Demo\n"
   - path: /etc/profile.d/db-functions.sh
     permissions: '0755'
     content: |
       function nse() {
         sudo nsenter --pid --uts --mount --ipc --net --target $(docker inspect --format="{{ .State.Pid }}" $1)
       }
-      function dev_db() {
-        eval `cat /etc/environment`
-        /usr/bin/docker run -it -e DEBUG=1 -p 3306:3306 -p 4444:4444 -p 4567:4567 -p 4568:4568 -e PUBLISH=3306 -e HOST=$COREOS_PRIVATE_IPV4 -e CLUSTER=galera paulczar/percona-galera:latest bash
-      }
-      function database() {
-        sudo nsenter --pid --uts --mount --ipc --net --target $(docker inspect --format="{{ .State.Pid }}" database)
+      function glusterfs() {
+        sudo nsenter --pid --uts --mount --ipc --net --target $(docker inspect --format="{{ .State.Pid }}" glusterfs)
       }
       function rebuild() {
-        docker build -t paulczar/percona-galera /home/core/share
+        docker build -t paulczar/glusterfs /home/core/share
       }
       function cleanup() {
-        etcdctl rm --recursive /database
+        etcdctl rm --recursive /glusterfs
       }
