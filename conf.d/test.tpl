@@ -1,6 +1,6 @@
 [template]
-src   = "hosts"
-dest  = "/tmp/hosts"
+src   = "test"
+dest  = "/tmp/test.tpl"
 owner = "root"
 group = "root"
 mode  = "0644"
@@ -9,4 +9,3 @@ keys = [
 ]
 
 check_cmd = "/app/bin/check {{ .src }}"
-reload_cmd = "/app/bin/fix_hosts"

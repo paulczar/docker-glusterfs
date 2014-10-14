@@ -43,7 +43,7 @@ function count_cluster_members() {
 
 function publish_to_etcd() {
     etcdctl $ETCD_OPTIONS set $ETCD_PATH/volumes/$VOLUME/hosts/$HOSTNAME $HOST --ttl $ETCD_TTL >/dev/null
-    etcdctl $ETCD_OPTIONS set /hosts/$HOSTNAME $HOST --ttl $ETCD_TTL >/dev/null
+    # etcdctl $ETCD_OPTIONS set /hosts/$HOSTNAME $HOST --ttl $ETCD_TTL >/dev/null
 }
 
 function configure_etcd() {

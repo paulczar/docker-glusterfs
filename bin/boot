@@ -45,7 +45,7 @@ etcd_make_directory volumes/$VOLUME/hosts
 etcd_set_default volumes/$VOLUME/host $HOST
 etcd_set_default volumes/$VOLUME/mode $MODE
 etcd_set_default volumes/$VOLUME/expected_members $EXPECTED_MEMBERS
-etcdctl --no-sync -C $ETCD /hosts/$HOSTNAME $HOST >/dev/null 2>&1 || true
+etcdctl --no-sync -C $ETCD set /hosts/$(hostname -s) $HOST >/dev/null 2>&1 || true
 
 
 # wait for confd to run once and install initial templates
@@ -87,8 +87,9 @@ else
       echo -n "."
     done
     cluster_members
-    my_ip
-    gluster volume create $VOLUME $MODE $EXPECTED_MEMBERS $HOST:/export/$VOLUME $CLUSTER_MEMBERS
+    probe_peers
+    sleep 5
+    gluster volume create $VOLUME $MODE $EXPECTED_MEMBERS `hostname -s`:/export/$VOLUME $CLUSTER_MEMBERS
     gluster volume start $VOLUME
     gluster volume info
   fi
