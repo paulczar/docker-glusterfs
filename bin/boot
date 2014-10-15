@@ -47,6 +47,7 @@ etcd_set_default volumes/$VOLUME/mode $MODE
 etcd_set_default volumes/$VOLUME/expected_members $EXPECTED_MEMBERS
 etcdctl --no-sync -C $ETCD set /hosts/$(hostname -s) $HOST >/dev/null 2>&1 || true
 
+sleep 5
 
 # wait for confd to run once and install initial templates
 until confd -onetime -node $ETCD -config-file /app/confd.toml; do

@@ -2,4 +2,4 @@
 confdir  = "/app"
 interval = 5
 prefix   = "/"
-quiet = true
+quiet = false
