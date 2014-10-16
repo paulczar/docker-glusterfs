@@ -35,7 +35,7 @@ coreos:
         RemainAfterExit=yes
         ExecStartPre=/usr/bin/docker pull paulczar/glusterfs:latest
         ExecStart=/bin/sh -c "/usr/bin/docker inspect glusterfs-data >/dev/null 2>&1 || \
-          docker run --name glusterfs -v /export paulczar/glusterfs:latest true"
+          docker run --name glusterfs-data -v /export paulczar/glusterfs:latest true"
     - name: glusterfs.service
       command: <%= @command %>
       enable: true
@@ -49,12 +49,14 @@ coreos:
         TimeoutStartSec=20m
         ExecStartPre=/usr/bin/docker pull paulczar/glusterfs:latest
         ExecStart=/bin/sh -c "/usr/bin/docker run --rm --cap-add=SYS_ADMIN \
-          -p 111:111 -p 24007:24007 -p 2049:2049 \
+          --name glusterfs -e EXPECTED_MEMBERS=2 \
+          -p 111:111 -p 24007:24007 -p 24009:24009 \
           -p 38465:38465 -p 38466:38466 -p 38467:38467 \
+          -p 38468:38468 -p 48759:48759 \
+          -p 49152:49152 -p 49153:49153 -p 49154:49154 \
           -p 1110:1110 -p 4045:4045 -e PUBLISH=24007 \
-          -e EXPECTED_MEMBERS=2 -e DEBUG=1 \
           -e HOST=$COREOS_PRIVATE_IPV4 paulczar/glusterfs:latest bin/boot"
-        ExecStop=/usr/bin/docker stop database
+        ExecStop=/usr/bin/docker stop glusterfs
 write_files:
   - path: /etc/motd
     content: "Gluster Cluster Demo\n"
