@@ -28,7 +28,7 @@ RUN locale-gen en_US.UTF-8
 
 RUN \
   wget -O - http://download.gluster.org/pub/gluster/glusterfs/3.5/LATEST/Debian/pubkey.gpg | apt-key add - && \
-  echo "deb http://download.gluster.org/pub/gluster/glusterfs/3.3/LATEST/Debian/apt/ wheezy main" > /etc/apt/sources.list.d/gluster.list && \
+  echo "deb http://download.gluster.org/pub/gluster/glusterfs/3.5/LATEST/Debian/apt/ wheezy main" > /etc/apt/sources.list.d/gluster.list && \
   apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y glusterfs-server attr
 
