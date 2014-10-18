@@ -89,7 +89,8 @@ else
     done
     cluster_members
     probe_peers
-    sleep 5
+    echo "==> Sleep 20 seconds for peer to settle down"
+    sleep 20
     gluster volume create $VOLUME $MODE $EXPECTED_MEMBERS `hostname -s`:/export/$VOLUME $CLUSTER_MEMBERS
     gluster volume start $VOLUME
     gluster volume info
